@@ -150,16 +150,28 @@ sub maintain_connections {
     my $cv    = AnyEvent->condvar;
 
     $cv->begin (sub { shift->send });
-    for my $host (@{$CONF->{servers}}) {
-        next if $CONS{$host};
-        $cv->begin;
-        $CONS{$host} = connect_memcached($host, sub {
-            if ($_[0] eq 'err') {
-                print "Failed connecting to $host: ", $_[1], "\n";
-                delete $CONS{$host};
-            }
-            $cv->end;
-        });
+    for my $hostentry (@{$CONF->{servers}}) {
+
+        # support 1.2.3.4:4000-4025
+        my @hosts;
+        if ($hostentry =~ /(.+?):(\d+)-(\d+)$/){
+            my ($host, $startport, $endport) = ($1, $2, $3);
+            @hosts = map { "$host:$_" } ($startport..$endport);
+        }else{
+           @hosts = $hostentry;
+        }
+
+        foreach my $host (@hosts){
+            next if $CONS{$host};
+            $cv->begin;
+            $CONS{$host} = connect_memcached($host, sub {
+                if ($_[0] eq 'err') {
+                    print "Failed connecting to $host: ", $_[1], "\n";
+                    delete $CONS{$host};
+                }
+                $cv->end;
+            });
+        }
     }
     $cv->end;
 
